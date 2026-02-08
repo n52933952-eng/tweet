@@ -174,6 +174,21 @@ app.use((req, res, next) => {
 })
 
 // ============================================
+// SERVE STATIC FILES (PRODUCTION)
+// ============================================
+// Serve React frontend in production
+app.use(express.static(path.join(__dirname, '../frontent/dist')))
+
+// Catch all handler: send back React's index.html for SPA routing
+app.get('*', (req, res) => {
+  // Don't catch API routes - they should have been handled above
+  if (req.path.startsWith('/api/')) {
+    return res.status(404).json({ error: 'API route not found', path: req.originalUrl })
+  }
+  res.sendFile(path.join(__dirname, '../frontent/dist/index.html'))
+})
+
+// ============================================
 // ERROR HANDLER
 // ============================================
 app.use((error, req, res, next) => {
