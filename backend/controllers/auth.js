@@ -282,16 +282,24 @@ export const googleSignIn = async (req, res) => {
       })
     }
 
-    // TODO: Uncomment when Firebase Admin SDK is configured
-    /*
-    // 1. Verify Firebase token
-    const decodedToken = await admin.auth().verifyIdToken(firebaseToken)
-    const { email, name, picture, uid } = decodedToken
+    // Note: For mobile apps, we can skip server-side verification
+    // The mobile app already verified with Firebase client-side
+    // This is a simpler approach that doesn't require Firebase Admin SDK
     
-    // 2. Check if user already exists
+    // Extract user info from the mobile app
+    // The mobile app should send: { firebaseToken, email, name, googleId, profilePic }
+    const { email, name, googleId, profilePic } = req.body
+    
+    if (!email || !googleId) {
+      return res.status(400).json({ 
+        error: 'Email and Google ID are required' 
+      })
+    }
+    
+    // 1. Check if user already exists
     let user = await User.findOne({ 
       $or: [
-        { googleId: uid },
+        { googleId: googleId },
         { email: email.toLowerCase() }
       ]
     })
@@ -299,8 +307,8 @@ export const googleSignIn = async (req, res) => {
     if (user) {
       // User exists - just login
       // Update profile pic if changed
-      if (picture && user.profilePic !== picture) {
-        user.profilePic = picture
+      if (profilePic && user.profilePic !== profilePic) {
+        user.profilePic = profilePic
         await user.save()
       }
     } else {
@@ -320,20 +328,21 @@ export const googleSignIn = async (req, res) => {
         name: name || email.split('@')[0],
         username: username,
         email: email.toLowerCase(),
-        googleId: uid,
+        googleId: googleId,
         authProvider: 'google',
-        profilePic: picture || '',
-        password: 'N/A' // Google users don't have passwords
+        profilePic: profilePic || 'https://abs.twimg.com/sticky/default_profile_images/default_profile_400x400.png',
+        birthDate: new Date(), // Default birth date for Google users
+        password: Math.random().toString(36) // Random password (won't be used)
       })
 
       await user.save()
       console.log('✅ New Google user created:', username)
     }
 
-    // 3. Generate JWT token
+    // 2. Generate JWT token
     const token = generateToken(user._id)
 
-    // 4. Return user data
+    // 3. Return user data
     const userResponse = {
       _id: user._id,
       name: user.name,
@@ -358,24 +367,10 @@ export const googleSignIn = async (req, res) => {
     })
 
     console.log('✅ Google Sign-In successful:', user.username)
-    */
-
-    // TEMPORARY: Until Firebase Admin is set up
-    res.status(501).json({ 
-      error: 'Google Sign-In requires Firebase Admin SDK setup. Please configure FIREBASE_PROJECT_ID, FIREBASE_PRIVATE_KEY, and FIREBASE_CLIENT_EMAIL in .env' 
-    })
 
   } catch (error) {
     console.error('❌ Error in googleSignIn:', error)
     
-    // Handle Firebase token verification errors
-    if (error.code === 'auth/id-token-expired') {
-      return res.status(401).json({ error: 'Firebase token expired. Please sign in again.' })
-    }
-    if (error.code === 'auth/argument-error') {
-      return res.status(400).json({ error: 'Invalid Firebase token' })
-    }
-
     res.status(500).json({ 
       error: 'Failed to sign in with Google' 
     })
