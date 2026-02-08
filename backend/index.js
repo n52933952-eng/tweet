@@ -180,11 +180,12 @@ app.use((req, res, next) => {
 app.use(express.static(path.join(__dirname, '../frontent/dist')))
 
 // Catch all handler: send back React's index.html for SPA routing
-app.get('*', (req, res) => {
+app.use((req, res, next) => {
   // Don't catch API routes - they should have been handled above
   if (req.path.startsWith('/api/')) {
     return res.status(404).json({ error: 'API route not found', path: req.originalUrl })
   }
+  // Send the React app for all other routes
   res.sendFile(path.join(__dirname, '../frontent/dist/index.html'))
 })
 
