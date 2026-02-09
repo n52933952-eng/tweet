@@ -355,7 +355,11 @@ export const getSuggestedUsers = async (req, res) => {
       }
     })
       .select('-password')
-      .sort({ followerCount: -1 })
+      .sort([
+        { followerCount: -1 },  // Most followers first
+        { tweetCount: -1 },     // Then most active (tweets)
+        { createdAt: -1 }       // Then newest accounts
+      ])
       .limit(limit)
 
     res.status(200).json({ users: suggestedUsers })
