@@ -1,5 +1,6 @@
 import Tweet from '../models/Tweet.js'
 import User from '../models/User.js'
+import { getIO } from '../socket/socket.js'
 
 /**
  * ============================================
@@ -77,6 +78,14 @@ export const createTweet = async (req, res) => {
     // Populate author info
     await newTweet.populate('author', '-password')
 
+    // Real-time: broadcast new tweet to all clients (like real Twitter)
+    try {
+      const payload = newTweet.toObject ? newTweet.toObject() : newTweet
+      getIO().emit('newTweet', payload)
+    } catch (e) {
+      // Socket not initialized (e.g. server start)
+    }
+
     res.status(201).json({
       message: 'Tweet created successfully',
       tweet: newTweet
@@ -91,44 +100,83 @@ export const createTweet = async (req, res) => {
 }
 
 /**
- * GET FEED - Get tweets from followed users
- * GET /api/tweets/feed
+ * GET FEED - Like real Twitter
+ * GET /api/tweets/feed?feedType=forYou|following&page=1&limit=20
+ *
+ * - following: only tweets from people you follow (+ your own)
+ * - forYou: mixed feed = following + suggested/trending tweets (so new users still see posts)
  */
 export const getFeed = async (req, res) => {
   try {
     const userId = req.user._id
+    const feedType = (req.query.feedType || 'forYou').toLowerCase()
     const page = parseInt(req.query.page) || 1
     const limit = parseInt(req.query.limit) || 20
 
-    // Get user's following list
     const user = await User.findById(userId).select('following')
     const following = user.following || []
-
-    // Include user's own tweets + tweets from people they follow
     const feedUserIds = [userId, ...following]
 
-    // Get tweets (exclude deleted, only published)
-    const tweets = await Tweet.find({
-      author: { $in: feedUserIds },
-      isDeleted: false,
-      isPublished: true,
-      tweetType: { $ne: 'reply' } // Don't show replies in main feed
-    })
-      .sort({ createdAt: -1 })
-      .skip((page - 1) * limit)
-      .limit(limit)
-      .populate('author', '-password')
-      .populate('retweetOf')
-      .populate('quotedTweet')
-      .lean()
-
-    // Get total count for pagination
-    const totalCount = await Tweet.countDocuments({
-      author: { $in: feedUserIds },
+    const baseFilter = {
       isDeleted: false,
       isPublished: true,
       tweetType: { $ne: 'reply' }
-    })
+    }
+
+    let tweets
+    let totalCount
+
+    if (feedType === 'following') {
+      // Only tweets from people you follow (+ yourself)
+      const filter = { ...baseFilter, author: { $in: feedUserIds } }
+      tweets = await Tweet.find(filter)
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .populate('author', '-password')
+        .populate('retweetOf')
+        .populate('quotedTweet')
+        .lean()
+      totalCount = await Tweet.countDocuments(filter)
+    } else {
+      // For You: mixed feed = following + suggested (trending by engagement)
+      const followingTweets = await Tweet.find({
+        ...baseFilter,
+        author: { $in: feedUserIds }
+      })
+        .sort({ createdAt: -1 })
+        .limit(limit * 2) // get extra to merge
+        .populate('author', '-password')
+        .populate('retweetOf')
+        .populate('quotedTweet')
+        .lean()
+
+      // Suggested: tweets from everyone else, sorted by engagement (like + retweet + views)
+      const suggestedTweets = await Tweet.find({
+        ...baseFilter,
+        author: { $nin: feedUserIds }
+      })
+        .sort({ likeCount: -1, retweetCount: -1, viewCount: -1, createdAt: -1 })
+        .limit(limit)
+        .populate('author', '-password')
+        .populate('retweetOf')
+        .populate('quotedTweet')
+        .lean()
+
+      // Merge and sort by createdAt, dedupe by _id
+      const seen = new Set()
+      const merged = []
+      for (const t of [...followingTweets, ...suggestedTweets]) {
+        const id = t._id.toString()
+        if (seen.has(id)) continue
+        seen.add(id)
+        merged.push(t)
+      }
+      merged.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+
+      totalCount = merged.length
+      tweets = merged.slice((page - 1) * limit, (page - 1) * limit + limit)
+    }
 
     res.status(200).json({
       tweets,
