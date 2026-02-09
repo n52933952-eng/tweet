@@ -157,6 +157,10 @@ UserSchema.index({ createdAt: -1 })
 // Search by name (for user search feature)
 UserSchema.index({ name: 'text', username: 'text' })
 
+// Suggested users / who to follow (filter: _id $nin following, sort by popularity)
+// Lets MongoDB scan in sort order and skip excluded ids – scales to millions
+UserSchema.index({ followerCount: -1, tweetCount: -1, createdAt: -1 })
+
 const User = mongoose.model('User', UserSchema)
 
 export default User

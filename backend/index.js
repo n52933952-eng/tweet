@@ -2,6 +2,8 @@ import express from 'express'
 import mongoose from 'mongoose'
 import dotenv from 'dotenv'
 import cors from 'cors'
+import helmet from 'helmet'
+import rateLimit from 'express-rate-limit'
 import cookieParser from 'cookie-parser'
 import { v2 as cloudinary } from 'cloudinary'
 import { createServer } from 'http'
@@ -60,6 +62,9 @@ cloudinary.config({
 // MIDDLEWARE
 // ============================================
 
+// Security headers (best practice for production)
+app.use(helmet({ contentSecurityPolicy: false })) // CSP disabled to allow Socket.IO; enable and tune for web if needed
+
 // Body parser - parse JSON requests (limit: 50MB for media)
 app.use(express.json({ limit: '50mb' }))
 app.use(express.urlencoded({ limit: '50mb', extended: true }))
@@ -67,9 +72,19 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }))
 // Cookie parser - for cookie-based authentication (if needed)
 app.use(cookieParser())
 
-// CORS - Allow mobile app and web frontend
+// Rate limiting - protect API from abuse (firm for millions of users)
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 300,                 // 300 requests per IP per window (adjust per product needs)
+  message: { error: 'Too many requests, please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false
+})
+app.use('/api/', apiLimiter)
+
+// CORS - Allow mobile app and web frontend (set FRONTEND_URL in production)
 app.use(cors({
-  origin: process.env.FRONTEND_URL || '*', // Update with your mobile app URL
+  origin: process.env.FRONTEND_URL || '*',
   credentials: true
 }))
 
