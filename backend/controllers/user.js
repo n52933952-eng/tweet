@@ -15,7 +15,38 @@ import Tweet from '../models/Tweet.js'
  */
 
 /**
- * GET USER PROFILE
+ * GET USER PROFILE BY ID (for app when you have userId e.g. from tweet.author)
+ * GET /api/users/profile/:id
+ * Returns user + isFollowing (whether current user follows this profile)
+ */
+export const getUserById = async (req, res) => {
+  try {
+    const { id } = req.params
+    const currentUserId = req.user._id
+
+    const user = await User.findById(id).select('-password')
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' })
+    }
+
+    const currentUser = await User.findById(currentUserId).select('following')
+    const isFollowing = (currentUser.following || []).some(
+      (fid) => fid.toString() === id
+    )
+
+    res.status(200).json({
+      user: user.toObject ? user.toObject() : user,
+      isFollowing
+    })
+  } catch (error) {
+    console.error('❌ Error in getUserById:', error)
+    res.status(500).json({ error: 'Failed to get user profile' })
+  }
+}
+
+/**
+ * GET USER PROFILE BY USERNAME
  * GET /api/users/:username
  */
 export const getUserProfile = async (req, res) => {
@@ -108,7 +139,9 @@ export const followUser = async (req, res) => {
     }
 
     // Check if already following
-    const isFollowing = currentUser.following.includes(id)
+    const isFollowing = (currentUser.following || []).some(
+      (fid) => fid.toString() === id
+    )
 
     if (isFollowing) {
       // Unfollow

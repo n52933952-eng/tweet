@@ -1,6 +1,7 @@
 import express from 'express'
 import {
   getUserProfile,
+  getUserById,
   updateProfile,
   followUser,
   getFollowers,
@@ -29,6 +30,9 @@ router.get('/suggested', getSuggestedUsers)      // GET /api/users/suggested
 
 // Search users
 router.get('/search', searchUsers)               // GET /api/users/search?q=query
+
+// Get user profile by ID (for app: tweet.author._id)
+router.get('/profile/:id', getUserById)         // GET /api/users/profile/:id
 
 // Get user profile by username
 router.get('/:username', getUserProfile)         // GET /api/users/:username
