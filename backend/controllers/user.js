@@ -286,8 +286,11 @@ export const searchUsers = async (req, res) => {
       return res.status(400).json({ error: 'Search query is required' })
     }
 
-    // Search by name or username (case-insensitive)
+    const currentUserId = req.user._id
+
+    // Search by name or username (case-insensitive); exclude current user
     const users = await User.find({
+      _id: { $ne: currentUserId },
       $or: [
         { name: { $regex: q, $options: 'i' } },
         { username: { $regex: q, $options: 'i' } }
@@ -297,16 +300,26 @@ export const searchUsers = async (req, res) => {
       .sort({ followerCount: -1 }) // Sort by popularity
       .skip((page - 1) * limit)
       .limit(limit)
+      .lean()
 
     const totalCount = await User.countDocuments({
+      _id: { $ne: currentUserId },
       $or: [
         { name: { $regex: q, $options: 'i' } },
         { username: { $regex: q, $options: 'i' } }
       ]
     })
 
+    const currentUser = await User.findById(currentUserId).select('following').lean()
+    const followingIds = new Set((currentUser.following || []).map(fid => fid.toString()))
+
+    const usersWithFollow = users.map(u => ({
+      ...u,
+      isFollowing: followingIds.has(u._id.toString())
+    }))
+
     res.status(200).json({
-      users,
+      users: usersWithFollow,
       pagination: {
         page,
         limit,
