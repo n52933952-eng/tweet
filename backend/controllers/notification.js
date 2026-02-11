@@ -1,7 +1,15 @@
 import Notification from '../models/Notification.js'
+import { emitToUser } from '../socket/socket.js'
+import {
+  sendLikeNotification,
+  sendRetweetNotification,
+  sendFollowNotification,
+  sendReplyNotification,
+} from '../services/pushNotifications.js'
 
 /**
  * Create a notification (used by tweet + user controllers). No duplicate like for same actor+tweet+type.
+ * Emits Socket.io 'notification' to recipient for real-time badge + list update (like Twitter).
  */
 export const createNotification = async ({ recipientId, actorId, type, tweetId = null }) => {
   if (!recipientId || !actorId || recipientId.toString() === actorId.toString()) return
@@ -10,12 +18,35 @@ export const createNotification = async ({ recipientId, actorId, type, tweetId =
     if (tweetId) filter.tweet = tweetId
     const existing = await Notification.findOne(filter).sort({ createdAt: -1 }).limit(1).lean()
     if (existing) return // avoid spam: one notification per actor+type+tweet
-    await Notification.create({
+    const newNotif = await Notification.create({
       recipient: recipientId,
       actor: actorId,
       type,
       tweet: tweetId || null,
     })
+    await newNotif.populate('actor', 'name username profilePic')
+    if (tweetId) await newNotif.populate('tweet', 'text')
+    const payload = newNotif.toObject ? newNotif.toObject() : newNotif
+    emitToUser(recipientId.toString(), 'notification', payload)
+    const actor = payload.actor || {}
+    const actorName = actor.name || actor.username || 'Someone'
+    const images = { profilePic: actor.profilePic || null }
+    const tweetIdStr = tweetId ? tweetId.toString() : null
+    const actorIdStr = actorId.toString()
+    switch (type) {
+      case 'like':
+        sendLikeNotification(recipientId.toString(), actorName, tweetIdStr, images)
+        break
+      case 'retweet':
+        sendRetweetNotification(recipientId.toString(), actorName, tweetIdStr, images)
+        break
+      case 'follow':
+        sendFollowNotification(recipientId.toString(), actorName, actorIdStr, images)
+        break
+      case 'reply':
+        sendReplyNotification(recipientId.toString(), actorName, tweetIdStr, images)
+        break
+    }
   } catch (e) {
     console.error('❌ createNotification:', e)
   }
