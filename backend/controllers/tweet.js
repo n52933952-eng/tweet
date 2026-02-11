@@ -1,6 +1,7 @@
 import Tweet from '../models/Tweet.js'
 import User from '../models/User.js'
 import { getIO } from '../socket/socket.js'
+import { createNotification } from './notification.js'
 
 /**
  * ============================================
@@ -67,8 +68,19 @@ export const createTweet = async (req, res) => {
       $inc: { tweetCount: 1 } 
     })
 
-    // If reply, add to parent tweet's replies
-    if (replyTo) {
+    // If reply, add to parent tweet's replies and notify parent author
+    if (replyTo && replyToUser && replyToUser.toString() !== userId.toString()) {
+      await Tweet.findByIdAndUpdate(replyTo, {
+        $push: { replies: newTweet._id },
+        $inc: { replyCount: 1 }
+      })
+      await createNotification({
+        recipientId: replyToUser,
+        actorId: userId,
+        type: 'reply',
+        tweetId: replyTo,
+      })
+    } else if (replyTo) {
       await Tweet.findByIdAndUpdate(replyTo, {
         $push: { replies: newTweet._id },
         $inc: { replyCount: 1 }
@@ -301,7 +313,12 @@ export const likeTweet = async (req, res) => {
       tweet.likeCount += 1
       await tweet.save()
 
-      // TODO: Create notification for tweet author
+      await createNotification({
+        recipientId: tweet.author,
+        actorId: userId,
+        type: 'like',
+        tweetId: tweet._id,
+      })
 
       return res.status(200).json({ 
         message: 'Tweet liked',
@@ -369,7 +386,12 @@ export const retweet = async (req, res) => {
       originalTweet.retweetCount += 1
       await originalTweet.save()
 
-      // TODO: Create notification for original tweet author
+      await createNotification({
+        recipientId: originalTweet.author,
+        actorId: userId,
+        type: 'retweet',
+        tweetId: originalTweet._id,
+      })
 
       return res.status(200).json({ 
         message: 'Retweeted successfully',

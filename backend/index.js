@@ -22,6 +22,7 @@ import { initSocket } from './socket/socket.js'
 import authRoutes from './routes/auth.js'
 import userRoutes from './routes/user.js'
 import tweetRoutes from './routes/tweet.js'
+import notificationRoutes from './routes/notification.js'
 
 /**
  * ============================================
@@ -170,8 +171,7 @@ app.use('/api/tweets', tweetRoutes)
 // Message routes (coming soon)
 // app.use('/api/messages', messageRoutes)
 
-// Notification routes (coming soon)
-// app.use('/api/notifications', notificationRoutes)
+app.use('/api/notifications', notificationRoutes)
 
 // ============================================
 // 404 HANDLER - Route not found

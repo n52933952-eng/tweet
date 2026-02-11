@@ -1,5 +1,6 @@
 import User from '../models/User.js'
 import Tweet from '../models/Tweet.js'
+import { createNotification } from './notification.js'
 
 /**
  * ============================================
@@ -174,7 +175,11 @@ export const followUser = async (req, res) => {
       await currentUser.save()
       await userToFollow.save()
 
-      // TODO: Create notification for followed user
+      await createNotification({
+        recipientId: userToFollow._id,
+        actorId: userId,
+        type: 'follow',
+      })
 
       return res.status(200).json({
         message: 'Followed successfully',
