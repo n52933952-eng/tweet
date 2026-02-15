@@ -348,24 +348,18 @@ export const getSuggestedUsers = async (req, res) => {
     const userId = req.user._id
     const limit = parseInt(req.query.limit) || 5
 
-    // Get current user's following list
-    const currentUser = await User.findById(userId).select('following')
+    // Get current user's following list (may be null/undefined for new users)
+    const currentUser = await User.findById(userId).select('following').lean()
+    const excludeIds = [userId, ...(currentUser?.following || [])]
 
-    // Find users that current user is NOT following
-    // Sort by follower count (popular users)
+    // Find users that current user is NOT following (exclude self + following list)
     const suggestedUsers = await User.find({
-      _id: { 
-        $ne: userId, // Not the current user
-        $nin: currentUser.following // Not already following
-      }
+      _id: { $nin: excludeIds }
     })
       .select('-password')
-      .sort([
-        { followerCount: -1 },  // Most followers first
-        { tweetCount: -1 },     // Then most active (tweets)
-        { createdAt: -1 }       // Then newest accounts
-      ])
+      .sort({ followerCount: -1, tweetCount: -1, createdAt: -1 })
       .limit(limit)
+      .lean()
 
     res.status(200).json({ users: suggestedUsers })
 
