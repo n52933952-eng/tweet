@@ -342,24 +342,27 @@ export const searchUsers = async (req, res) => {
 /**
  * GET SUGGESTED USERS (Who to follow)
  * GET /api/users/suggested
+ * Returns all other users (so list is never empty); each has isFollowing so app can show Follow/Following.
  */
 export const getSuggestedUsers = async (req, res) => {
   try {
     const userId = req.user._id
-    const limit = parseInt(req.query.limit) || 5
+    const limit = parseInt(req.query.limit) || 20
 
-    // Get current user's following list (may be null/undefined for new users)
     const currentUser = await User.findById(userId).select('following').lean()
-    const excludeIds = [userId, ...(currentUser?.following || [])]
+    const followingIds = new Set((currentUser?.following || []).map(id => id.toString()))
 
-    // Find users that current user is NOT following (exclude self + following list)
-    const suggestedUsers = await User.find({
-      _id: { $nin: excludeIds }
-    })
+    // All users except current user, sorted by popularity (so list is never empty)
+    const users = await User.find({ _id: { $ne: userId } })
       .select('-password')
       .sort({ followerCount: -1, tweetCount: -1, createdAt: -1 })
       .limit(limit)
       .lean()
+
+    const suggestedUsers = users.map(u => ({
+      ...u,
+      isFollowing: followingIds.has(u._id.toString())
+    }))
 
     res.status(200).json({ users: suggestedUsers })
 

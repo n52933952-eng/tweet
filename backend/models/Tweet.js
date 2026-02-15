@@ -141,8 +141,9 @@ TweetSchema.index({ author: 1, createdAt: -1 })
 // Feed generation (timeline)
 TweetSchema.index({ createdAt: -1 })
 
-// Reply chains
+// Reply chains + paginated reply list
 TweetSchema.index({ replyTo: 1 })
+TweetSchema.index({ replyTo: 1, createdAt: -1 })
 
 // Retweets
 TweetSchema.index({ retweetOf: 1 })

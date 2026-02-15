@@ -3,6 +3,7 @@ import {
   createTweet, 
   getFeed, 
   getTweet, 
+  getReplies,
   deleteTweet, 
   likeTweet, 
   retweet,
@@ -29,6 +30,9 @@ router.get('/feed', getFeed)                     // GET /api/tweets/feed
 
 // Get user's tweets
 router.get('/user/:username', getUserTweets)     // GET /api/tweets/user/:username
+
+// Get replies (paginated) – must be before /:id
+router.get('/:id/replies', getReplies)           // GET /api/tweets/:id/replies?page=1&limit=20
 
 // Get single tweet
 router.get('/:id', getTweet)                     // GET /api/tweets/:id

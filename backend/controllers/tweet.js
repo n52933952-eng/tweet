@@ -68,12 +68,9 @@ export const createTweet = async (req, res) => {
       $inc: { tweetCount: 1 } 
     })
 
-    // If reply, add to parent tweet's replies and notify parent author
+    // If reply: only increment parent replyCount (replies are fetched by query replyTo – scales to millions)
     if (replyTo && replyToUser && replyToUser.toString() !== userId.toString()) {
-      await Tweet.findByIdAndUpdate(replyTo, {
-        $push: { replies: newTweet._id },
-        $inc: { replyCount: 1 }
-      })
+      await Tweet.findByIdAndUpdate(replyTo, { $inc: { replyCount: 1 } })
       await createNotification({
         recipientId: replyToUser,
         actorId: userId,
@@ -81,10 +78,7 @@ export const createTweet = async (req, res) => {
         tweetId: replyTo,
       })
     } else if (replyTo) {
-      await Tweet.findByIdAndUpdate(replyTo, {
-        $push: { replies: newTweet._id },
-        $inc: { replyCount: 1 }
-      })
+      await Tweet.findByIdAndUpdate(replyTo, { $inc: { replyCount: 1 } })
     }
 
     // Populate author info
@@ -209,6 +203,7 @@ export const getFeed = async (req, res) => {
 /**
  * GET SINGLE TWEET
  * GET /api/tweets/:id
+ * Does NOT populate replies – use GET /api/tweets/:id/replies for paginated replies (scales to millions).
  */
 export const getTweet = async (req, res) => {
   try {
@@ -218,10 +213,6 @@ export const getTweet = async (req, res) => {
       .populate('author', '-password')
       .populate('retweetOf')
       .populate('quotedTweet')
-      .populate({
-        path: 'replies',
-        populate: { path: 'author', select: '-password' }
-      })
 
     if (!tweet || tweet.isDeleted) {
       return res.status(404).json({ error: 'Tweet not found' })
@@ -236,6 +227,53 @@ export const getTweet = async (req, res) => {
   } catch (error) {
     console.error('❌ Error in getTweet:', error)
     res.status(500).json({ error: 'Failed to get tweet' })
+  }
+}
+
+/**
+ * GET REPLIES (paginated) – scales to millions of replies
+ * GET /api/tweets/:id/replies?page=1&limit=20
+ */
+export const getReplies = async (req, res) => {
+  try {
+    const { id } = req.params
+    const page = parseInt(req.query.page) || 1
+    const limit = Math.min(parseInt(req.query.limit) || 20, 50)
+
+    const parent = await Tweet.findById(id).select('_id').lean()
+    if (!parent) {
+      return res.status(404).json({ error: 'Tweet not found' })
+    }
+
+    const replies = await Tweet.find({
+      replyTo: id,
+      isDeleted: false,
+      isPublished: true
+    })
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .populate('author', '-password')
+      .lean()
+
+    const totalCount = await Tweet.countDocuments({
+      replyTo: id,
+      isDeleted: false,
+      isPublished: true
+    })
+
+    res.status(200).json({
+      replies,
+      pagination: {
+        page,
+        limit,
+        totalPages: Math.ceil(totalCount / limit),
+        totalCount
+      }
+    })
+  } catch (error) {
+    console.error('❌ Error in getReplies:', error)
+    res.status(500).json({ error: 'Failed to get replies' })
   }
 }
 
